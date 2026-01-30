@@ -2,20 +2,18 @@ name: Auto Build
 
 on:
   schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
-
+    - cron: '0 0 * * *'  # 每天 UTC 时间午夜运行
+  workflow_dispatch:      # 允许手动触发
 jobs:
   create-release:
     name: Auto Build
     runs-on: windows-latest
-    permissions:
-      contents: write  # 關鍵：必須添加此權限
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      # 不需要指定 token，GitHub 會自動提供
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Clone YimMenuV2
       run: |
@@ -24,12 +22,13 @@ jobs:
     - name: Patch YimMenuV2
       run: |
         cd YimMenuV2
-        Copy-Item ..\*.py .
-        Copy-Item ..\*.TTF .
-        Copy-Item ..\*.diff .
+        cp ../*.py .
+        cp ../*.TTF .
+        cp ../*.diff .
+        dos2unix patch.diff
         git apply patch.diff
         python font.py
-        Move-Item MainFont.cpp src/game/frontend/fonts -Force
+        mv MainFont.cpp src/game/frontend/fonts -Force
 
     - name: Translate YimMenuV2
       run: |
@@ -49,61 +48,29 @@ jobs:
     - name: Build 64bit release DLL
       run: |
         cd YimMenuV2
-        cmake --build ./build --config Release --target YimMenuV2
-
-    - name: Find DLL file
-      id: find_dll
-      run: |
-        # 尋找 DLL 文件
-        $dllFiles = Get-ChildItem -Path YimMenuV2 -Recurse -Filter "YimMenuV2.dll" -ErrorAction SilentlyContinue
-        if ($dllFiles) {
-          foreach ($file in $dllFiles) {
-            Write-Host "Found DLL: $($file.FullName)"
-            # 將找到的第一個 DLL 複製到工作目錄
-            Copy-Item $file.FullName "YimMenuV2.dll"
-          }
-        } else {
-          Write-Host "Searching for any DLL files..."
-          Get-ChildItem -Path YimMenuV2 -Recurse -Filter "*.dll" | ForEach-Object { Write-Host "Found DLL: $($_.FullName)" }
-          exit 1
-        }
+        cmake --build ./build --config Release --target YimMenuV2 --
 
     - name: Create Release
+      id: create_release
       uses: softprops/action-gh-release@v1
-      # 不需要手動設置 env，action 會自動使用 GITHUB_TOKEN
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: latest
-        name: "Autobuild $(Get-Date -Format 'yyyy-MM-dd')"
+        overwrite: true
+        name: Autobuild
         body: |
-          🚀 Automatic Build of YimMenu
-          
-          **Build Information:**
-          - Commit: ${{ github.sha }}
-          - Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-          - Workflow: ${{ github.workflow }}
-          - Run Number: ${{ github.run_number }}
+          Automatic build of YimMenu
+          Commit: ${{ github.sha }}
         draft: false
         prerelease: false
-        make_latest: true  # 確保這是最新版本
         files: |
-          YimMenuV2.dll
+          YimMenuV2/build/YimMenuV2.dll
 
-    - name: Commit translation updates
+    - name: Commit and update translation
       run: |
-        # 檢查是否有變更
-        git status
-        $hasChanges = git diff --name-only
-        if ($hasChanges) {
-          # 配置 git
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # 提交變更
-          git add translation.json
-          git commit -m "Update translations [skip ci]"
-          
-          # 推送到當前分支
-          git push
-        } else {
-          Write-Host "No changes to commit"
-        }
+        git config user.name "github-actions"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add translation.json
+        git commit -m "Automated update"
+        git push
