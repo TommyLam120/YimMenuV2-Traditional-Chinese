@@ -1,12 +1,15 @@
-name: Auto Build
+name: YimMenu Windows Build
 
 on:
-  schedule:
-    - cron: '0 0 * * *'  # 每天 UTC 时间午夜运行
-  workflow_dispatch:      # 允许手动触发
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
 jobs:
-  create-release:
-    name: Auto Build
+  build-windows:
+    name: Build YimMenu for Windows
     runs-on: windows-latest
     
     steps:
@@ -16,21 +19,18 @@ jobs:
     - name: Clone YimMenuV2
       run: |
         git clone --recursive https://github.com/YimMenu/YimMenuV2.git
+        cd YimMenuV2
 
-    - name: Patch YimMenuV2
+    - name: Translate YimMenuV2
       run: |
         cd YimMenuV2
         cp ../*.py .
         cp ../*.TTF .
         cp ../*.diff .
-        dos2unix patch.diff
-        git apply patch.diff
+        cp ../*.json .
+        git apply stage.diff
         python font.py
         mv MainFont.cpp src/game/frontend/fonts -Force
-
-    - name: Translate YimMenuV2
-      run: |
-        python update_translation.py
         python translate.py
     
     - name: Setup MSVC environment
@@ -48,17 +48,14 @@ jobs:
         cd YimMenuV2
         cmake --build ./build --config Release --target YimMenuV2 --
 
-    - name: Create Release
-      id: create_release
-      uses: softprops/action-gh-release@v1
+    - name: Rename DLL to YimMenuV2-dev-{GITHUB_SHA}.dll
+      run: |
+        cd YimMenuV2/build
+        del YimMenuV2-dev-*.dll
+        ren YimMenuV2.dll YimMenuV2-dev-${{github.sha}}.dll
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: latest
-        overwrite: true
-        name: Autobuild
-        body: |
-          Automatic build of YimMenu
-          Commit: ${{ github.sha }}
-        draft: false
-        prerelease: false
-        files: |
-          YimMenuV2/build/YimMenuV2.dll
+        name: binary
+        path: YimMenuV2/build/YimMenuV2-dev-*.dll
