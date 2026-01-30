@@ -57,7 +57,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: Latest
-        overwrite: true
+        overwrite_files: true
         name: Autobuild
         body: |
           Automatic build of YimMenu
@@ -66,4 +66,5 @@ jobs:
         prerelease: false
         files: |
           YimMenuV2/build/YimMenuV2.dll
+
           
